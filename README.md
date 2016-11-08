@@ -2,7 +2,7 @@
 
 MultCameraCalibration based on opencv3.0 for Stereo_match
 
-To use this Project:
+This Project requires:
 
 1.opencv3.0 or later
 
