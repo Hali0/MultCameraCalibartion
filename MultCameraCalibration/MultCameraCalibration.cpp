@@ -1,5 +1,6 @@
-
-//先对两个摄像头进行单独标定，然后在进行立体标定  
+//双目摄像头立体标定
+//版本：Version 2.0
+//先对两个摄像头进行单独标定，然后在进行立体标定并生成相应yml文件
 #include <opencv2/opencv.hpp>  
 #include <highgui.hpp>  
 #include "cv.h"  
@@ -173,26 +174,15 @@ int main()
 {
     
 	bool isFindL, isFindR;
+	
+	Mat canvas;
+	int w, h;
+	w = 320;
+	h = 240;
+	canvas.create(h * 3, w * 2, CV_8UC3);
 
 	Mat left, right;
 
-	vector<Mat> imgs(2);
-	
-	IplImage* img1 = cvCreateImage(cvSize(320, 180), IPL_DEPTH_8U, 3);
-	Mat black = cvarrToMat(img1);
-	for (int i = 0; i < img1->height; i++)
-	{
-		uchar *ptrImage = (uchar*)(img1->imageData + i * img1->widthStep);
-		for (int j = 0; j < img1->width; j++)
-		{
-			ptrImage[3 * j + 0] = 0;
-			ptrImage[3 * j + 1] = 0;
-			ptrImage[3 * j + 2] = 0;
-		}
-	}
-	imgs[0] = black;
-	imgs[1] = black;
-	rgbImageL = black;
 	int goodFrameCount = 0;
 	// 打开左摄像头
 	VideoCapture capleft(1);
@@ -212,11 +202,19 @@ int main()
 	{
 		// 取得左摄像头一帧的画面并显示
 		capleft >> left;
-		//imshow("Left Capture", left);
 		// 取得右摄像头一帧的画面并显示
 		capright >> right;
-		//imshow("Right Capture", right);
 
+		//左上图像画到画布上
+		//得到画布的一部分 
+		Mat canvasPart = canvas(Rect(0, 0, w, h));
+		//把图像缩放到跟canvasPart一样大小
+		resize(left, canvasPart, canvasPart.size(), 0, 0, INTER_AREA);
+		
+		//右上图像画到画布上
+		//获得画布的另一部分
+		canvasPart = canvas(Rect(w, 0, w, h));
+		resize(right, canvasPart, canvasPart.size(), 0, 0, INTER_LINEAR);
 		//读取按键W
 		if (cvWaitKey(10) == 'w')
 		{
@@ -231,6 +229,7 @@ int main()
 			isFindL = findChessboardCorners(rgbImageL, boardSize, cornerL);
 			isFindR = findChessboardCorners(rgbImageR, boardSize, cornerR);
 
+
 			//如果两幅图像都找到了所有的角点 则说明这两幅图像是可行的
 			if (isFindL == true && isFindR == true)
 			{
@@ -244,6 +243,9 @@ int main()
 				cornerSubPix(grayImageL, cornerL, Size(5, 5), Size(-1, -1), TermCriteria(CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 20, 0.1));
 				drawChessboardCorners(rgbImageL, boardSize, cornerL, isFindL);
 				//imshow("chessboardL", rgbImageL);
+				//左中图像画到画布上
+				canvasPart = canvas(Rect(0, h, w, h));
+				resize(rgbImageL, canvasPart, canvasPart.size(), 0, 0, INTER_LINEAR);
 
 				//将左图脚点信息保存
 				imagePointL.push_back(cornerL);
@@ -252,9 +254,10 @@ int main()
 				cornerSubPix(grayImageR, cornerR, Size(5, 5), Size(-1, -1), TermCriteria(CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 20, 0.1));
 				drawChessboardCorners(rgbImageR, boardSize, cornerR, isFindR);
 				//imshow("chessboardR", rgbImageR);
-				imgs[0] = rgbImageL;
-				imgs[1] = rgbImageR;
-				MultiImage_OneWin("Chessboard", imgs, cvSize(2, 1), cvSize(400, 280));
+				//右中图像画到画布上
+				canvasPart = canvas(Rect(w, h, w, h));
+				resize(rgbImageR, canvasPart, canvasPart.size(), 0, 0, INTER_LINEAR);
+
 				//将右图脚点信息保存
 				imagePointR.push_back(cornerR);
 
@@ -268,9 +271,7 @@ int main()
 			}
 		}
 
-		imgs[0] = left;
-		imgs[1] = right;
-		MultiImage_OneWin("Capture", imgs, cvSize(2, 1), cvSize(400, 280));
+		imshow("Output", canvas);
 		//读取按键Q
 		if (waitKey(10) == 'q')
 		{
@@ -329,9 +330,16 @@ int main()
 
 	//imshow("ImageL", rectifyImageL);
 	//imshow("ImageR", rectifyImageR);
-	imgs[0] = rectifyImageL;
-	imgs[1] = rectifyImageR;
-	MultiImage_OneWin("Calibration", imgs, cvSize(2, 1), cvSize(400, 280));
+	
+	//左下图像画到画布上
+	Mat canvasPart = canvas(Rect(0, h * 2, w, h));
+	resize(rectifyImageL, canvasPart, canvasPart.size(), 0, 0, INTER_LINEAR);
+	
+	//右下图像画到画布上
+	canvasPart = canvas(Rect(w, h * 2, w, h));
+	resize(rectifyImageR, canvasPart, canvasPart.size(), 0, 0, INTER_LINEAR);
+
+	imshow("Output", canvas);
 	//imwrite("ImageL",rectifyImageL);
 	//imwrite("ImageR", rectifyImageR);
 
@@ -344,37 +352,37 @@ int main()
 	//把左右两幅图像显示到同一个画面上
 	//这里只显示了最后一副图像的校正结果。并没有把所有的图像都显示出来
 
-	Mat canvas;
-	double sf;
-	int w, h;
-	sf = 600. / MAX(imageSize.width, imageSize.height);
-	w = cvRound(imageSize.width * sf);
-	h = cvRound(imageSize.height * sf);
-	canvas.create(h, w * 2, CV_8UC3);
+	Mat canvas_;
+	double sf_;
+	int w_, h_;
+	sf_ = 600. / MAX(imageSize.width, imageSize.height);
+	w_ = cvRound(imageSize.width * sf_);
+	h_ = cvRound(imageSize.height * sf_);
+	canvas_.create(h_, w_ * 2, CV_8UC3);
 
 	//左图像画到画布上
-	Mat canvasPart = canvas(Rect(w * 0, 0, w, h));                                //得到画布的一部分  
-	resize(rectifyImageL, canvasPart, canvasPart.size(), 0, 0, INTER_AREA);  //把图像缩放到跟canvasPart一样大小  
-	Rect vroiL(cvRound(validROIL.x*sf), cvRound(validROIL.y*sf),                //获得被截取的区域    
-		cvRound(validROIL.width*sf), cvRound(validROIL.height*sf));
-	rectangle(canvasPart, vroiL, Scalar(0, 0, 200), 3, 8);                      //画上一个矩形  
+	Mat canvasPart_ = canvas_(Rect(w_ * 0, 0, w_, h_));                                //得到画布的一部分  
+	resize(rectifyImageL, canvasPart_, canvasPart_.size(), 0, 0, INTER_AREA);  //把图像缩放到跟canvasPart一样大小  
+	Rect vroiL(cvRound(validROIL.x*sf_), cvRound(validROIL.y*sf_),                //获得被截取的区域    
+		cvRound(validROIL.width*sf_), cvRound(validROIL.height*sf_));
+	rectangle(canvasPart_, vroiL, Scalar(0, 0, 200), 3, 8);                      //画上一个矩形  
 
 	cout << "Painted ImageL" << endl;
 
 	//右图像画到画布上
-	canvasPart = canvas(Rect(w, 0, w, h));                                      //获得画布的另一部分  
-	resize(rectifyImageR, canvasPart, canvasPart.size(), 0, 0, INTER_LINEAR);
-	Rect vroiR(cvRound(validROIR.x * sf), cvRound(validROIR.y*sf),
-		cvRound(validROIR.width * sf), cvRound(validROIR.height * sf));
-	rectangle(canvasPart, vroiR, Scalar(0, 159, 0), 3, 8);
+	canvasPart_ = canvas_(Rect(w_, 0, w_, h_));                                      //获得画布的另一部分  
+	resize(rectifyImageR, canvasPart_, canvasPart_.size(), 0, 0, INTER_LINEAR);
+	Rect vroiR(cvRound(validROIR.x * sf_), cvRound(validROIR.y*sf_),
+		cvRound(validROIR.width * sf_), cvRound(validROIR.height * sf_));
+	rectangle(canvasPart_, vroiR, Scalar(0, 159, 0), 3, 8);
 
 	cout << "Painted ImageR" << endl;
 
 	//画上对应的线条
-	for (int i = 0; i < canvas.rows;i += 16)
-		line(canvas, Point(0, i), Point(canvas.cols, i), Scalar(0, 200, 0), 1, 8);
+	for (int i = 0; i < canvas_.rows;i += 16)
+		line(canvas_, Point(0, i), Point(canvas_.cols, i), Scalar(0, 200, 0), 1, 8);
 
-	imshow("rectified", canvas);
+	imshow("rectified", canvas_);
 
 	cout << "wait key" << endl;
 	waitKey(0);
