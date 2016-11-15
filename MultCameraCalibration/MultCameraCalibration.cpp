@@ -1,5 +1,5 @@
 //双目摄像头立体标定
-//版本：Version 2.0
+//版本：Version 2.2
 //先对两个摄像头进行单独标定，然后在进行立体标定并生成相应yml文件
 #include <opencv2/opencv.hpp>  
 #include <highgui.hpp>  
